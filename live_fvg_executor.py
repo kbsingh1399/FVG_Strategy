@@ -28,6 +28,8 @@ except ImportError:
 # ── Strategy Invariants ────────────────────────────────────────────────────────
 MAGIC_NUMBER = 7771399
 ORDER_COMMENT = "fvg_strategy"
+COMMENT_TRANCHE_A = "fvg_2R"
+COMMENT_TRANCHE_B = "fvg_runner"
 ACCOUNT_RISK_USD = 10.0
 MAX_OPEN_POSITIONS = 3
 BASKET = [
@@ -65,7 +67,7 @@ def get_fvg_positions():
     positions = mt5.positions_get()
     if not positions:
         return []
-    return [p for p in positions if p.magic == MAGIC_NUMBER or ORDER_COMMENT in str(p.comment)]
+    return [p for p in positions if p.magic == MAGIC_NUMBER or "fvg" in str(p.comment).lower()]
 
 def calculate_lots(symbol, order_type, entry_price, sl_price):
     """Calculates exact lot size for $10 risk using MT5's broker profit calculator."""
@@ -129,7 +131,7 @@ def punch_order(symbol, direction, entry_price, sl_price, tp2r_price, risk_dist)
         "tp": round(tp2r_price, info.digits),
         "deviation": 20,
         "magic": MAGIC_NUMBER,
-        "comment": ORDER_COMMENT,
+        "comment": COMMENT_TRANCHE_A,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": filling,
     }
@@ -164,7 +166,7 @@ def punch_order(symbol, direction, entry_price, sl_price, tp2r_price, risk_dist)
             "tp": 0.0,  # Open runner
             "deviation": 20,
             "magic": MAGIC_NUMBER,
-            "comment": ORDER_COMMENT,
+            "comment": COMMENT_TRANCHE_B,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": filling,
         }
