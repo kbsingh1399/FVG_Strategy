@@ -271,16 +271,17 @@ def manage_open_positions():
 def scan_and_execute_setups():
     """Scans all 9 basket assets for fresh mechanical setups on completed 1H bars."""
     open_positions = get_fvg_positions()
-    if len(open_positions) >= MAX_OPEN_POSITIONS:
-        return
-        
     active_symbols = {p.symbol for p in open_positions}
     
+    # Heat budget: cap by number of distinct active assets (not raw ticket count)
+    if len(active_symbols) >= MAX_OPEN_POSITIONS:
+        return
+        
     for symbol in BASKET:
         if symbol in active_symbols:
             continue
             
-        if len(get_fvg_positions()) >= MAX_OPEN_POSITIONS:
+        if len(active_symbols) >= MAX_OPEN_POSITIONS:
             break
             
         rates_1h = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 60)
@@ -384,8 +385,9 @@ def run_loop(single_pass=False):
             scan_and_execute_setups()
             
             active = get_fvg_positions()
+            active_symbols = {p.symbol for p in active}
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            print(f"[{now_str}] Heartbeat: Active FVG positions = {len(active)} / {MAX_OPEN_POSITIONS}", end="\r")
+            print(f"[{now_str}] Heartbeat: Active FVG assets = {len(active_symbols)} / {MAX_OPEN_POSITIONS} (open tickets = {len(active)})", end="\r")
             
             if single_pass:
                 break
