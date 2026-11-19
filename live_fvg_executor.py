@@ -30,7 +30,8 @@ MAGIC_NUMBER = 7771399
 ORDER_COMMENT = "fvg_strategy"
 COMMENT_TRANCHE_A = "fvg_2R"
 COMMENT_TRANCHE_B = "fvg_runner"
-ACCOUNT_RISK_USD = 10.0
+ACCOUNT_RISK_USD = 5.50
+MAX_RISK_USD = 6.00
 MAX_OPEN_POSITIONS = 3
 BASKET = [
     "NAS100.p", "BTCUSD.pi", "AU200.p", "UK100.p", "EURUSD.pi",
@@ -70,7 +71,7 @@ def get_fvg_positions():
     return [p for p in positions if p.magic == MAGIC_NUMBER or "fvg" in str(p.comment).lower()]
 
 def calculate_lots(symbol, order_type, entry_price, sl_price):
-    """Calculates exact lot size for $10 risk using MT5's broker profit calculator."""
+    """Calculates exact lot size for target risk ($5.50) strictly capped at max risk ($6.00)."""
     info = mt5.symbol_info(symbol)
     if not info:
         return 0.0
@@ -88,6 +89,26 @@ def calculate_lots(symbol, order_type, entry_price, sl_price):
     raw_lots = ACCOUNT_RISK_USD / unit_risk
     step = info.volume_step if info.volume_step > 0 else 0.01
     lots = round(round(raw_lots / step) * step, 2)
+    
+    # If rounded below broker minimum lot, check if minimum lot is within MAX_RISK_USD
+    if lots < info.volume_min:
+        min_risk = info.volume_min * unit_risk
+        if min_risk <= MAX_RISK_USD:
+            lots = info.volume_min
+        else:
+            print(f"[{symbol}] Min lot {info.volume_min} risk (${min_risk:.2f}) exceeds max risk cap (${MAX_RISK_USD:.2f}). Skipping setup.")
+            return 0.0
+            
+    # Enforce strict upper risk cap
+    actual_risk = lots * unit_risk
+    if actual_risk > MAX_RISK_USD:
+        if lots - step >= info.volume_min:
+            lots = round(lots - step, 2)
+            actual_risk = lots * unit_risk
+        if actual_risk > MAX_RISK_USD:
+            print(f"[{symbol}] Lot {lots} risk (${actual_risk:.2f}) exceeds max risk cap (${MAX_RISK_USD:.2f}). Skipping setup.")
+            return 0.0
+            
     lots = max(info.volume_min, min(lots, info.volume_max))
     return lots
 
@@ -418,5 +439,10 @@ def run_loop(single_pass=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FVG Strategy MT5 Live Automated Execution Daemon")
     parser.add_argument("--once", action="store_true", help="Run a single scan & manage cycle then exit")
+    parser.add_argument("--risk", type=float, default=5.50, help="Target risk per trade in USD (default: 5.50)")
+    parser.add_argument("--max-risk", type=float, default=6.00, help="Strict upper risk cap per trade in USD (default: 6.00)")
     args = parser.parse_args()
+    
+    ACCOUNT_RISK_USD = args.risk
+    MAX_RISK_USD = args.max_risk
     run_loop(single_pass=args.once)
