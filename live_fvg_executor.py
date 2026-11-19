@@ -189,6 +189,8 @@ def punch_order(symbol, direction, entry_price, sl_price, tp2r_price, risk_dist)
             
     return True
 
+INITIAL_RISK_CACHE = {}
+
 def manage_open_positions():
     """Manages active FVG trades: moves to Breakeven at +1.0R and trails runners."""
     positions = get_fvg_positions()
@@ -210,11 +212,23 @@ def manage_open_positions():
         cur_sl = p.sl
         cur_tp = p.tp
         
-        # Estimate initial risk distance from SL
-        if cur_sl == 0:
-            continue
-            
-        risk_dist = abs(open_price - cur_sl)
+        # Robust initial risk distance calculation (immune to SL moves)
+        if p.ticket in INITIAL_RISK_CACHE:
+            risk_dist = INITIAL_RISK_CACHE[p.ticket]
+        elif cur_tp > 0:
+            risk_dist = abs(cur_tp - open_price) / 2.0
+            INITIAL_RISK_CACHE[p.ticket] = risk_dist
+        else:
+            companion = [pos for pos in positions if pos.symbol == p.symbol and pos.tp > 0]
+            if companion:
+                risk_dist = abs(companion[0].tp - companion[0].price_open) / 2.0
+                INITIAL_RISK_CACHE[p.ticket] = risk_dist
+            elif (is_long and cur_sl < open_price) or (not is_long and cur_sl > open_price):
+                risk_dist = abs(open_price - cur_sl)
+                INITIAL_RISK_CACHE[p.ticket] = risk_dist
+            else:
+                continue
+                
         if risk_dist <= 0:
             continue
             
@@ -389,7 +403,7 @@ def run_loop(single_pass=False):
             active = get_fvg_positions()
             active_symbols = {p.symbol for p in active}
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            print(f"[{now_str}] Heartbeat: Active FVG assets = {len(active_symbols)} / {MAX_OPEN_POSITIONS} (open tickets = {len(active)})", end="\r")
+            print(f"[{now_str}] Heartbeat: Active FVG assets = {len(active_symbols)} / {MAX_OPEN_POSITIONS} (open tickets = {len(active)})", flush=True)
             
             if single_pass:
                 break
